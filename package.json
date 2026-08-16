@@ -25,8 +25,7 @@
   ],
   "license": "MIT",
   "bin": {
-    "workingon": "src/bin/workingon.mjs",
-    "workingon-install": "install.mjs"
+    "workingon": "src/bin/workingon.mjs"
   },
   "files": [
     "src",
@@ -37,11 +36,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oliverjueguen/skill-claude-workingon.git"
+    "url": "git+https://github.com/oliverjueguen/workingon-claude-skill.git"
   },
   "bugs": {
-    "url": "https://github.com/oliverjueguen/skill-claude-workingon/issues"
+    "url": "https://github.com/oliverjueguen/workingon-claude-skill/issues"
   },
-  "homepage": "https://github.com/oliverjueguen/skill-claude-workingon#readme",
+  "homepage": "https://github.com/oliverjueguen/workingon-claude-skill#readme",
   "author": "oliverjueguen"
 }

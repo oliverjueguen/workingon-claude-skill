@@ -4,7 +4,7 @@
 
 **Claude Code records what you work on into your ticketing tool, automatically.**
 
-[![version](https://img.shields.io/badge/version-0.1.0-informational?style=flat-square)](https://github.com/oliverjueguen/skill-claude-workingon/releases)
+[![version](https://img.shields.io/badge/version-0.1.0-informational?style=flat-square)](https://github.com/oliverjueguen/workingon-claude-skill/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D18-5FA04E?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![javascript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/docs/Web/JavaScript)
@@ -74,10 +74,15 @@ Adding a sixth is one file implementing the contract in [`src/providers/base.mjs
 ## Install
 
 ```bash
-git clone https://github.com/oliverjueguen/skill-claude-workingon.git
-cd skill-claude-workingon
-node install.mjs
-node ~/.claude/workingon/bin/workingon.mjs setup
+npx workingon install
+npx workingon setup
+```
+
+Or clone it, if you would rather read the code before running it:
+
+```bash
+git clone https://github.com/oliverjueguen/workingon-claude-skill.git
+cd workingon-claude-skill && node install.mjs
 ```
 
 Setup is three steps:
@@ -98,7 +103,7 @@ workingon setup --step 3 --container team_abc --label Claude
 
 Restart Claude Code so the hooks load, then `workingon doctor` to confirm.
 
-Uninstall with `node install.mjs --uninstall`. Hooks and skill go, config and history stay.
+Uninstall with `npx workingon uninstall`. Hooks and skill go, config and history stay.
 
 ## Daily use
 

@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import readline from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 import {
   loadConfig, saveConfig, saveCredentials, isConfigured, containerFor, decisionFor,
   CONFIG_PATH, HOME, SESSIONS_DIR, DRY_RUN_LOG, logSimulated,
@@ -110,6 +111,26 @@ const labelsFor = (cfg) => (cfg.label ? [cfg.label] : []);
 // --- commands ----------------------------------------------------------------
 
 const commands = {};
+
+/**
+ * `npx workingon install` has to work from a package downloaded on the fly, so
+ * the installer is reached relative to this file rather than the cwd.
+ */
+commands.install = async () => {
+  const { spawnSync } = await import('node:child_process');
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const installer = path.resolve(here, '..', '..', 'install.mjs');
+  if (!fs.existsSync(installer)) fail(`Installer not found at ${installer}.`);
+
+  const passthrough = process.argv.slice(3);
+  const result = spawnSync(process.execPath, [installer, ...passthrough], { stdio: 'inherit' });
+  process.exitCode = result.status ?? 0;
+};
+
+commands.uninstall = async () => {
+  process.argv.splice(3, 0, '--uninstall');
+  return commands.install();
+};
 
 commands.providers = async () => {
   const rows = describeProviders();
@@ -780,6 +801,8 @@ commands.help = async () => {
 Usage: workingon <command> [options]
 
 Setup
+  install [--dry-run]         Install the hooks and the skill
+  uninstall                   Remove them, keeping config and history
   setup                       Guided three step setup
   setup --step 1 --provider <id> [--token ... --url ... --email ...]
   setup --step 2 --mode ask|autosave|off [--write-style nudge|silent] [--dry-run true|false]
