@@ -1,0 +1,22 @@
+{
+  "name": "workingon",
+  "description": "Claude Code skill and hooks that record your work in Jira, Linear, GitHub Issues, Trello or Vikunja",
+  "version": "0.1.0",
+  "author": {
+    "name": "oliverjueguen"
+  },
+  "homepage": "https://github.com/oliverjueguen/workingon-claude-skill#readme",
+  "repository": "https://github.com/oliverjueguen/workingon-claude-skill",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "skill",
+    "hooks",
+    "ticketing",
+    "jira",
+    "linear",
+    "github-issues",
+    "trello",
+    "vikunja"
+  ]
+}

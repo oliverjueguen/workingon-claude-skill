@@ -94,6 +94,40 @@ check('installer defaults to simulation', fresh.dryRun === true);
 check('installer defaults to ask mode', fresh.mode === 'ask');
 check('installer forbids label creation', fresh.createLabels === false);
 
+// --- plugin packaging --------------------------------------------------------
+
+console.log('\nPlugin packaging');
+const buildResult = (() => {
+  try {
+    execFileSync(NODE, [path.join(REPO, 'scripts', 'build-plugin.mjs'), '--check'], { encoding: 'utf8' });
+    return { ok: true, out: '' };
+  } catch (err) {
+    return { ok: false, out: `${err.stdout || ''}${err.stderr || ''}` };
+  }
+})();
+check('generated plugin files are in sync with the sources', buildResult.ok, buildResult.out.trim());
+
+const marketplace = JSON.parse(fs.readFileSync(path.join(REPO, '.claude-plugin', 'marketplace.json'), 'utf8'));
+const manifest = JSON.parse(fs.readFileSync(path.join(REPO, '.claude-plugin', 'plugin.json'), 'utf8'));
+const pluginHooks = JSON.parse(fs.readFileSync(path.join(REPO, 'hooks', 'hooks.json'), 'utf8'));
+const pkg = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8'));
+
+check('marketplace version tracks package.json', marketplace.metadata.version === pkg.version);
+check('plugin version tracks package.json', manifest.version === pkg.version);
+check('marketplace lists the plugin', marketplace.plugins.some((p) => p.name === 'workingon'));
+for (const event of ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Stop', 'SessionEnd']) {
+  check(`plugin registers ${event}`, Array.isArray(pluginHooks.hooks?.[event]));
+}
+const everyCommand = Object.values(pluginHooks.hooks).flat().flatMap((g) => g.hooks).map((h) => h.command);
+check('plugin hooks resolve through CLAUDE_PLUGIN_ROOT', everyCommand.every((c) => c.includes('${CLAUDE_PLUGIN_ROOT}')));
+check('plugin hook scripts exist in the repo',
+  everyCommand.every((c) => fs.existsSync(path.join(REPO, c.replace(/.*\$\{CLAUDE_PLUGIN_ROOT\}\//, '').replace(/"$/, '')))),
+  everyCommand.join(' '));
+
+const pluginSkill = fs.readFileSync(path.join(REPO, 'skills', 'workingon', 'SKILL.md'), 'utf8');
+check('plugin skill has no unsubstituted placeholder', !pluginSkill.includes('{{WORKINGON}}'));
+check('plugin skill points at the plugin root', pluginSkill.includes('${CLAUDE_PLUGIN_ROOT}/src/bin/workingon.mjs'));
+
 // --- the setup wizard --------------------------------------------------------
 
 console.log('\nSetup wizard');

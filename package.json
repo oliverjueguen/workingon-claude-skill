@@ -7,9 +7,10 @@
     "node": ">=18"
   },
   "scripts": {
+    "build:plugin": "node scripts/build-plugin.mjs",
     "install-skill": "node install.mjs",
     "uninstall-skill": "node install.mjs --uninstall",
-    "test": "node test/run.mjs",
+    "test": "node scripts/build-plugin.mjs --check && node test/run.mjs",
     "mock": "node test/mock-server.mjs"
   },
   "keywords": [
@@ -30,6 +31,9 @@
   "files": [
     "src",
     "skill",
+    "skills",
+    "hooks",
+    ".claude-plugin",
     "install.mjs",
     "README.md",
     "LICENSE"

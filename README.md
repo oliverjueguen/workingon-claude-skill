@@ -10,7 +10,7 @@
 [![javascript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/docs/Web/JavaScript)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success?style=flat-square)](package.json)
 [![tests](https://img.shields.io/badge/tests-180%20passing-success?style=flat-square)](test/run.mjs)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-skill%20%2B%20hooks-D97757?style=flat-square)](https://claude.com/claude-code)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square)](#install)
 
 [![Jira](https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white)](#supported-tools)
 [![Linear](https://img.shields.io/badge/Linear-5E6AD2?style=flat-square&logo=linear&logoColor=white)](#supported-tools)
@@ -39,17 +39,39 @@ No ticket for a question. No ticket for two typos. One ticket per task, and late
 
 ## Install
 
+Inside Claude Code, no terminal needed:
+
+```
+/plugin marketplace add oliverjueguen/workingon-claude-skill
+/plugin install workingon@workingon
+```
+
+Claude Code registers the skill and the hooks itself. Then configure it from a terminal, because a token should not go through a chat window:
+
+```bash
+npx workingon setup
+```
+
+Both paths share the same configuration in `~/.claude/workingon/`, so it makes no difference which one installed the tool.
+
+<details>
+<summary>Other ways to install</summary>
+
+From npm, if you would rather not use the plugin system:
+
 ```bash
 npx workingon install
 npx workingon setup
 ```
 
-Or clone it, if you would rather read the code before running it:
+From source, if you would rather read the code before running it:
 
 ```bash
 git clone https://github.com/oliverjueguen/workingon-claude-skill.git
 cd workingon-claude-skill && node install.mjs
 ```
+
+</details>
 
 Setup is three steps:
 
