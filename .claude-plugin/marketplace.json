@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Claude Code skill and hooks that record your work in Jira, Linear, GitHub Issues, Trello or Vikunja",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "plugins": [
     {
       "name": "workingon",
       "source": "./",
       "description": "Claude Code skill and hooks that record your work in Jira, Linear, GitHub Issues, Trello or Vikunja",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "oliverjueguen"
       },

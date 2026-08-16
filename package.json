@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build:plugin": "node scripts/build-plugin.mjs",
+    "version": "node scripts/build-plugin.mjs && git add .claude-plugin hooks skills",
+    "prepublishOnly": "node scripts/build-plugin.mjs --check && node test/run.mjs",
     "install-skill": "node install.mjs",
     "uninstall-skill": "node install.mjs --uninstall",
     "test": "node scripts/build-plugin.mjs --check && node test/run.mjs",
