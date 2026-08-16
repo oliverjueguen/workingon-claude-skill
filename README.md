@@ -37,40 +37,6 @@ you work  ->  hooks capture  ->  enough work?  ->  Claude writes the ticket
 
 No ticket for a question. No ticket for two typos. One ticket per task, and later work on the same task becomes a short comment on it rather than a second ticket.
 
-## Why a skill and hooks together
-
-A skill alone depends on the model remembering to invoke it. A hook alone cannot write a ticket a human wants to read. Each does what it is good at.
-
-| Part | Job | Why it is right for the job |
-|---|---|---|
-| **Hooks** | Capture | Deterministic, cheap, and they never break a session |
-| **The skill** | Write | Has the whole conversation, so titles and bodies read well |
-| **`Stop` hook** | Decide | Notices unrecorded work and hands the decision to Claude |
-
-```mermaid
-flowchart LR
-    A[UserPromptSubmit] --> L[(local ledger)]
-    B[PostToolUse] --> L
-    C[SessionStart] --> L
-    L --> D{Stop hook<br/>enough work?}
-    D -->|no| E[stay quiet]
-    D -->|undecided folder| F[ask the user once]
-    D -->|yes| G[workingon skill]
-    G --> H[Jira / Linear / GitHub<br/>Trello / Vikunja]
-```
-
-## Supported tools
-
-| Tool | Container | Body format | Notable constraint |
-|---|---|---|---|
-| **Jira** | project key | wiki markup | REST v2 on purpose: v3 demands Atlassian Document Format |
-| **Linear** | team | markdown | API key goes in `Authorization` raw, no `Bearer` prefix |
-| **GitHub Issues** | `owner/repo` | markdown | Issues cannot be deleted through the API, only closed |
-| **Trello** | list | markdown | No real "done", so closing archives the card |
-| **Vikunja** | project | HTML | PUT creates and POST updates, and update replaces the task |
-
-Adding a sixth is one file implementing the contract in [`src/providers/base.mjs`](src/providers/base.mjs).
-
 ## Install
 
 ```bash
@@ -118,6 +84,40 @@ Normally nothing: work, and the ticket appears.
 | `/workingon status` | What is pending, and where it would go |
 | `/workingon skip` | Drop the pending work without recording it |
 | `/workingon doctor` | Diagnose configuration and connection |
+
+## Supported tools
+
+| Tool | Container | Body format | Notable constraint |
+|---|---|---|---|
+| **Jira** | project key | wiki markup | REST v2 on purpose: v3 demands Atlassian Document Format |
+| **Linear** | team | markdown | API key goes in `Authorization` raw, no `Bearer` prefix |
+| **GitHub Issues** | `owner/repo` | markdown | Issues cannot be deleted through the API, only closed |
+| **Trello** | list | markdown | No real "done", so closing archives the card |
+| **Vikunja** | project | HTML | PUT creates and POST updates, and update replaces the task |
+
+Adding a sixth is one file implementing the contract in [`src/providers/base.mjs`](src/providers/base.mjs).
+
+## Why a skill and hooks together
+
+A skill alone depends on the model remembering to invoke it. A hook alone cannot write a ticket a human wants to read. Each does what it is good at.
+
+| Part | Job | Why it is right for the job |
+|---|---|---|
+| **Hooks** | Capture | Deterministic, cheap, and they never break a session |
+| **The skill** | Write | Has the whole conversation, so titles and bodies read well |
+| **`Stop` hook** | Decide | Notices unrecorded work and hands the decision to Claude |
+
+```mermaid
+flowchart LR
+    A[UserPromptSubmit] --> L[(local ledger)]
+    B[PostToolUse] --> L
+    C[SessionStart] --> L
+    L --> D{Stop hook<br/>enough work?}
+    D -->|no| E[stay quiet]
+    D -->|undecided folder| F[ask the user once]
+    D -->|yes| G[workingon skill]
+    G --> H[Jira / Linear / GitHub<br/>Trello / Vikunja]
+```
 
 ## Modes
 
