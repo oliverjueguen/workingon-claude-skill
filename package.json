@@ -1,6 +1,6 @@
 {
   "name": "workingon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code skill and hooks that record your work in Jira, Linear, GitHub Issues, Trello or Vikunja",
   "type": "module",
   "engines": {
