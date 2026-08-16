@@ -1,0 +1,46 @@
+{
+  "provider": "jira",
+  "providers": {
+    "jira": {
+      "site": "https://yourcompany.atlassian.net",
+      "email": "you@company.com",
+      "token": "your-api-token",
+      "issueType": "Task"
+    },
+    "linear": { "token": "lin_api_xxx" },
+    "github": { "token": "github_pat_xxx" },
+    "trello": { "key": "your-key", "token": "your-token" },
+    "vikunja": { "url": "https://vikunja.example.com", "token": "tk_xxx" }
+  },
+
+  "mode": "ask",
+  "writeStyle": "nudge",
+
+  "defaultContainer": "ENG",
+  "containers": {
+    "my-repo": "ENG",
+    "C:/work/other-repo": "OPS"
+  },
+  "excluded": ["private-project"],
+  "label": "Claude",
+
+  "dryRun": true,
+  "createLabels": false,
+
+  "minEdits": 2,
+  "minPrompts": 1,
+  "debounceSeconds": 90,
+  "trackBash": true,
+  "maxPromptChars": 500,
+  "maxDescriptionChars": 600,
+  "maxCommentChars": 400,
+
+  "ignore": [
+    "**/node_modules/**", "**/.git/**", "**/dist/**", "**/build/**",
+    "**/.next/**", "**/target/**", "**/__pycache__/**",
+    "**/*.lock", "**/*-lock.json", "**/*-lock.yaml", "**/*.log"
+  ],
+
+  "quiet": false,
+  "debug": false
+}

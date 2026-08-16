@@ -1,0 +1,7 @@
+node_modules/
+*.log
+dry-run.log
+sessions/
+.DS_Store
+Thumbs.db
+config.json

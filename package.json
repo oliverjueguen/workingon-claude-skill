@@ -1,0 +1,47 @@
+{
+  "name": "workingon",
+  "version": "0.1.0",
+  "description": "Claude Code skill and hooks that record your work in Jira, Linear, GitHub Issues, Trello or Vikunja",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "install-skill": "node install.mjs",
+    "uninstall-skill": "node install.mjs --uninstall",
+    "test": "node test/run.mjs",
+    "mock": "node test/mock-server.mjs"
+  },
+  "keywords": [
+    "claude-code",
+    "skill",
+    "hooks",
+    "ticketing",
+    "jira",
+    "linear",
+    "github-issues",
+    "trello",
+    "vikunja"
+  ],
+  "license": "MIT",
+  "bin": {
+    "workingon": "src/bin/workingon.mjs",
+    "workingon-install": "install.mjs"
+  },
+  "files": [
+    "src",
+    "skill",
+    "install.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oliverjueguen/skill-claude-workingon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/oliverjueguen/skill-claude-workingon/issues"
+  },
+  "homepage": "https://github.com/oliverjueguen/skill-claude-workingon#readme",
+  "author": "oliverjueguen"
+}
