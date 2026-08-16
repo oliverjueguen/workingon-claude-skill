@@ -4,8 +4,8 @@
 
 **Claude Code records what you work on into your ticketing tool, automatically.**
 
-[![version](https://img.shields.io/badge/version-0.1.0-informational?style=flat-square)](https://github.com/oliverjueguen/workingon-claude-skill/releases)
-[![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![npm](https://img.shields.io/npm/v/workingon?style=flat-square&logo=npm&color=CB3837)](https://www.npmjs.com/package/workingon)
+[![license](https://img.shields.io/npm/l/workingon?style=flat-square&color=blue)](LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D18-5FA04E?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![javascript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/docs/Web/JavaScript)
 [![dependencies](https://img.shields.io/badge/dependencies-0-success?style=flat-square)](package.json)
