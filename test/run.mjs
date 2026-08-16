@@ -432,6 +432,24 @@ check('excluding deletes that ledger', !fs.existsSync(path.join(HOME, 'sessions'
 hook('user-prompt.mjs', { session_id: SPRIV, cwd: PRIVATE, user_input: 'another secret' });
 hook('post-tool.mjs', { session_id: SPRIV, cwd: PRIVATE, tool_name: 'Edit', tool_input: { file_path: path.join(PRIVATE, 'x.ts') } });
 check('an excluded folder captures nothing more', !fs.existsSync(path.join(HOME, 'sessions', `${SPRIV}.jsonl`)));
+
+// A session already open when the tool was installed never ran SessionStart,
+// so capture has to record the folder itself or the ledger would be orphaned
+// and survive the purge, which is exactly what a private folder must not do.
+const SLATE = 'session-installed-midway';
+fs.rmSync(path.join(HOME, 'sessions', `${SLATE}.state.json`), { force: true });
+const LATE = path.join(TMP, 'late-folder');
+fs.mkdirSync(LATE, { recursive: true });
+hook('post-tool.mjs', {
+  session_id: SLATE, cwd: LATE, tool_use_id: 'late-1', tool_name: 'Edit',
+  tool_input: { file_path: path.join(LATE, 'a.ts') },
+});
+check('capture records the folder when SessionStart never ran',
+  fs.existsSync(path.join(HOME, 'sessions', `${SLATE}.state.json`)));
+check('and the purge can then find it',
+  wo(['config', '--exclude', 'late-folder']).includes('Deleted local data'));
+check('leaving nothing behind', !fs.existsSync(path.join(HOME, 'sessions', `${SLATE}.jsonl`)));
+wo(['config', '--include', 'late-folder']);
 check('an excluded folder is silent at start', hook('session-start.mjs', { session_id: SPRIV, cwd: PRIVATE, source: 'startup' }) === null);
 check('an excluded folder never nudges', hook('stop.mjs', { session_id: SPRIV, cwd: PRIVATE, background_tasks: [] }) === null);
 wo(['config', '--map', 'private-project=4']);

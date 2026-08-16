@@ -108,7 +108,14 @@ export function currentHead(cwd) {
 export function contextFor(sid, cwdFallback) {
   const state = readState(sid);
   if (state.cwd) return { cwd: state.cwd, project: state.project, branch: state.branch || '' };
-  return detectContext(cwdFallback || process.cwd());
+
+  const ctx = detectContext(cwdFallback || process.cwd());
+  // Persist it so every events file has an owner. SessionStart does not run for
+  // a session that was already open when the tool was installed, and without
+  // this its events could not be attributed to a folder, so excluding that
+  // folder later would leave the captured work sitting on disk.
+  writeState(sid, { cwd: ctx.cwd, project: ctx.project, branch: ctx.branch });
+  return ctx;
 }
 
 // --- capture helpers --------------------------------------------------------

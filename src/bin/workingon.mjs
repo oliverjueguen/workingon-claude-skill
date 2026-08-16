@@ -804,8 +804,24 @@ commands.config = async () => {
       }
     } catch { /* no sessions yet */ }
 
-    out(`ok  "${key}" excluded. Nothing from that folder is captured or recorded.${purged ? `\n  Deleted local data from ${purged} earlier session(s).` : ''}`,
-      { ok: true, purgedSessions: purged });
+    // An events file with no state file belongs to no known folder, so it
+    // cannot be purged by folder. Deleting it blindly could destroy another
+    // project's history, so say it exists rather than guess.
+    let orphans = [];
+    try {
+      const files = fs.readdirSync(SESSIONS_DIR);
+      orphans = files.filter((f) => f.endsWith('.jsonl')
+        && !files.includes(f.replace(/\.jsonl$/, '.state.json')));
+    } catch { /* no sessions yet */ }
+
+    out([
+      `ok  "${key}" excluded. Nothing from that folder is captured or recorded.`,
+      purged ? `  Deleted local data from ${purged} earlier session(s).` : '',
+      orphans.length
+        ? `  Note: ${orphans.length} ledger(s) predate folder tracking and cannot be attributed to any folder.\n`
+          + `  Review or remove them under ${SESSIONS_DIR}.`
+        : '',
+    ].filter(Boolean).join('\n'), { ok: true, purgedSessions: purged, orphanLedgers: orphans });
     return;
   }
 
