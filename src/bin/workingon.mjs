@@ -7,6 +7,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import process from 'node:process';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
@@ -107,6 +108,26 @@ function enforceLength(text, limit, what) {
 }
 
 const labelsFor = (cfg) => (cfg.label ? [cfg.label] : []);
+
+/**
+ * Which install routes are present. Both can be, and then every hook fires
+ * twice, so `doctor` needs to be able to say so.
+ */
+function detectInstalls() {
+  const claudeDir = path.join(os.homedir(), '.claude');
+  const found = [];
+  try {
+    const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf8'));
+    const commands = Object.values(settings.hooks || {}).flat()
+      .flatMap((group) => group.hooks || []).map((h) => String(h.command || ''));
+    if (commands.some((c) => c.replace(/\\/g, '/').includes('/workingon/hooks/'))) found.push('npm package');
+  } catch { /* no settings, nothing registered */ }
+  try {
+    const enabled = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf8')).enabledPlugins || {};
+    if (Object.keys(enabled).some((k) => k.startsWith('workingon@'))) found.push('Claude Code plugin');
+  } catch { /* ignore */ }
+  return found;
+}
 
 // --- commands ----------------------------------------------------------------
 
@@ -366,6 +387,15 @@ commands.doctor = async () => {
       check(`label "${cfg.label}" exists`, exists || cfg.createLabels,
         exists ? 'yes' : (cfg.createLabels ? 'missing, will be created' : 'missing, and createLabels is off so it will be skipped'));
     } catch { /* not every tool exposes labels without a container */ }
+  }
+
+  // Installing both ways registers every hook twice. Capture deduplicates by
+  // event id so nothing is double counted, but it is still worth saying.
+  const installs = detectInstalls();
+  if (installs.length > 1) {
+    check('single installation', false,
+      `installed both as ${installs.join(' and ')}. Capture is deduplicated so counts stay correct, but keep one: `
+      + 'either `npx workingon uninstall`, or `/plugin uninstall workingon@workingon` inside Claude Code.');
   }
 
   if ((cfg.excluded || []).length) lines.push(`  excluded folders: ${cfg.excluded.join(', ')}`);

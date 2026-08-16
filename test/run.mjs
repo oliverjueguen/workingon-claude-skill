@@ -333,6 +333,46 @@ check('a later session sees the open ticket',
 check('compact stays quiet',
   hook('session-start.mjs', { session_id: 'session-3', cwd: CWD, source: 'compact' }) === null);
 
+// --- duplicate hook registration ---------------------------------------------
+
+console.log('\nDuplicate hook registration');
+// Installing both the plugin and the npm package registers every hook twice.
+// Claude Code gives each prompt and each tool call a unique id, so the same id
+// arriving again means a duplicate delivery, not new work.
+const SDUP = 'session-duplicates';
+const twice = (name, input) => { hook(name, input); hook(name, input); };
+
+twice('user-prompt.mjs', { session_id: SDUP, cwd: CWD, prompt_id: 'p-1', user_input: 'do the thing' });
+twice('post-tool.mjs', {
+  session_id: SDUP, cwd: CWD, tool_use_id: 't-1', tool_name: 'Edit',
+  tool_input: { file_path: path.join(CWD, 'src/dup.ts') },
+});
+twice('post-tool.mjs', {
+  session_id: SDUP, cwd: CWD, tool_use_id: 't-2', tool_name: 'Bash',
+  tool_input: { command: 'git commit -m "once"' }, tool_output: '[main abc1234] once',
+});
+
+const dupLedger = JSON.parse(wo(['ledger', '--session', SDUP, '--json']));
+check('a repeated prompt is recorded once', dupLedger.unsynced.prompts.length === 1, `${dupLedger.unsynced.prompts.length}`);
+check('a repeated edit counts once', dupLedger.unsynced.files[0]?.edits === 1, JSON.stringify(dupLedger.unsynced.files));
+check('a repeated commit is recorded once', dupLedger.unsynced.commits.length === 1, `${dupLedger.unsynced.commits.length}`);
+
+// Distinct events must still both land, or the deduplication would eat real work.
+hook('post-tool.mjs', {
+  session_id: SDUP, cwd: CWD, tool_use_id: 't-3', tool_name: 'Edit',
+  tool_input: { file_path: path.join(CWD, 'src/dup.ts') },
+});
+check('a genuine second edit still counts',
+  JSON.parse(wo(['ledger', '--session', SDUP, '--json'])).unsynced.files[0].edits === 2);
+
+// Older harnesses may not send an id, and losing events would be worse than
+// counting one twice.
+const SNOID = 'session-no-id';
+hook('user-prompt.mjs', { session_id: SNOID, cwd: CWD, user_input: 'no id here' });
+hook('user-prompt.mjs', { session_id: SNOID, cwd: CWD, user_input: 'another with no id' });
+check('events without an id are still recorded',
+  JSON.parse(wo(['ledger', '--session', SNOID, '--json'])).unsynced.prompts.length === 2);
+
 // --- silent style ------------------------------------------------------------
 
 console.log('\nSilent write style');

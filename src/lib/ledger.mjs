@@ -27,6 +27,25 @@ export function appendEvent(sid, event) {
   fs.appendFileSync(eventsPath(sid), line + '\n', 'utf8');
 }
 
+/**
+ * Append unless this exact event was already recorded.
+ *
+ * Claude Code delivers a unique id per prompt and per tool call, so the same
+ * event arriving twice means the hook is registered twice. That happens the
+ * moment someone installs both the plugin and the npm package, and without
+ * this every prompt and every edit would be counted double.
+ *
+ * Only the tail is scanned: duplicates arrive back to back, so there is no
+ * reason to read a long session's whole history on every keystroke.
+ */
+export function appendEventOnce(sid, event, dedupeKey, { window = 40 } = {}) {
+  if (!dedupeKey) return appendEvent(sid, event);
+  const recent = readEvents(sid).slice(-window);
+  if (recent.some((e) => e.id === dedupeKey)) return false;
+  appendEvent(sid, { ...event, id: dedupeKey });
+  return true;
+}
+
 export function readEvents(sid) {
   try {
     return fs.readFileSync(eventsPath(sid), 'utf8')

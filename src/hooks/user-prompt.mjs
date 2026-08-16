@@ -5,7 +5,7 @@
  */
 import { run } from './_util.mjs';
 import { loadConfig, isExcluded } from '../lib/config.mjs';
-import { appendEvent, contextFor } from '../lib/ledger.mjs';
+import { appendEventOnce, contextFor } from '../lib/ledger.mjs';
 import { redact } from '../lib/redact.mjs';
 
 run('user-prompt', async (input) => {
@@ -34,6 +34,10 @@ run('user-prompt', async (input) => {
     ? `${safe.slice(0, cfg.maxPromptChars).trimEnd()}...`
     : safe;
 
-  appendEvent(sid, { type: 'prompt', text, ...(found.length ? { redacted: found } : {}) });
+  appendEventOnce(
+    sid,
+    { type: 'prompt', text, ...(found.length ? { redacted: found } : {}) },
+    input.prompt_id,
+  );
   return null;
 });

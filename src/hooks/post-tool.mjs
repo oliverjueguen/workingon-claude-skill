@@ -6,7 +6,7 @@
 import { run } from './_util.mjs';
 import { loadConfig, isIgnored, isExcluded } from '../lib/config.mjs';
 import {
-  appendEvent, relativeTo, classifyCommand, parseCommitMessage, parseCommitSha, contextFor,
+  appendEventOnce, relativeTo, classifyCommand, parseCommitMessage, parseCommitSha, contextFor,
 } from '../lib/ledger.mjs';
 import { scrub } from '../lib/redact.mjs';
 
@@ -36,7 +36,7 @@ run('post-tool', async (input) => {
     for (const candidate of new Set(candidates)) {
       const rel = relativeTo(cwd, candidate);
       if (!rel || isIgnored(rel, cfg)) continue;
-      appendEvent(sid, { type: 'edit', file: rel, tool });
+      appendEventOnce(sid, { type: 'edit', file: rel, tool }, input.tool_use_id && `${input.tool_use_id}:${rel}`);
     }
     return null;
   }
@@ -50,22 +50,22 @@ run('post-tool', async (input) => {
     if (!kind) return null;
 
     if (kind === 'commit') {
-      appendEvent(sid, {
+      appendEventOnce(sid, {
         type: 'commit',
         sha: parseCommitSha(input.tool_output),
         message: scrub(parseCommitMessage(cmd)),
-      });
+      }, input.tool_use_id);
       return null;
     }
 
     // Commands routinely carry credentials: curl headers, inline env vars,
     // deploy tokens. Same rule as prompts, scrub before it reaches disk.
     const safe = scrub(cmd);
-    appendEvent(sid, {
+    appendEventOnce(sid, {
       type: 'bash',
       kind,
       cmd: safe.length > 200 ? `${safe.slice(0, 197)}...` : safe,
-    });
+    }, input.tool_use_id);
   }
 
   return null;
