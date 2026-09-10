@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
 import readline from 'node:readline/promises';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   loadConfig, saveConfig, saveCredentials, isConfigured, containerFor, decisionFor,
@@ -643,6 +644,10 @@ commands.update = async () => {
     const next = { lastSyncedSeq: sum.seq, lastSyncedAt: new Date().toISOString() };
     if (flags.done) next.closed = true;
     if (flags.reopen) next.closed = false;
+    // Closing the ticket ends the reason to stamp commits with it. Leaving the file
+    // behind would mark tomorrow's unrelated work with yesterday's ticket, which is
+    // worse than not stamping at all: a wrong reference reads as a true one.
+    if (flags.done) clearTicketFile();
     if (patch.title) next.issueTitle = patch.title;
     if (patch.containerId) next.containerId = patch.containerId;
     writeState(sid, next);
@@ -738,12 +743,215 @@ commands.link = async () => {
     lastSyncedSeq: flags['keep-unsynced'] ? (readState(sid).lastSyncedSeq || 0) : sum.seq,
     closed: Boolean(issue.done),
   });
-  out(`ok  Session linked to ${issue.key}: ${issue.title}\n  ${issue.url}`, { ok: true, ...issue });
+
+  // Linking a ticket means starting on it, so the board should say so. Moving it
+  // here rather than asking is the point: a column that only reflects reality when
+  // someone remembers to drag a card is a column nobody trusts.
+  //
+  // Closing needs no equivalent. When the kanban view has a done bucket configured,
+  // Vikunja moves the card itself as soon as the task is marked done, so
+  // `update --done` already lands it in the right column. Adding a second write
+  // would only race the first.
+  const moved = await moveToInProgress(p, issue);
+  writeTicketFile(issue);
+
+  out(
+    `ok  Session linked to ${issue.key}: ${issue.title}` +
+    (moved.note ? `\n  ${moved.note}` : '') +
+    `\n  ${issue.url}`,
+    { ok: true, ...issue, movedTo: moved.bucket || null },
+  );
 };
 
+/**
+ * Drags the card into the "in progress" column, when there is one and it is
+ * unambiguous.
+ *
+ * Every failure here is deliberately soft. Linking a ticket has to keep working on
+ * a board with no kanban view, on a provider that has no columns at all, and on a
+ * board whose columns cannot be told apart. Refusing to link because a card could
+ * not be dragged would break the useful part to protect the decorative one.
+ */
+async function moveToInProgress(p, issue) {
+  const Provider = p.constructor;
+  if (!Provider.capabilities?.buckets || typeof p.board !== 'function') return {};
+  if (issue.done) return { note: 'Already done, left where it is.' };
+
+  try {
+    const board = await p.board(issue.containerId);
+    if (!board) return {};
+
+    const target = Provider.inProgressBucket(board);
+    if (!target) {
+      // Two or more middle columns, or none. Saying so beats picking one: moving a
+      // card to a column the person did not choose looks like it worked.
+      return { note: 'No single "in progress" column on this board, so nothing was moved.' };
+    }
+
+    const at = typeof p.bucketOf === 'function'
+      ? await p.bucketOf(issue.id, issue.containerId, board.viewId)
+      : null;
+    if (at && at.id === target.id) return { note: `Already in ${target.title}.` };
+
+    await p.moveToBucket(issue.id, issue.containerId, board.viewId, target.id);
+    return { note: `Moved to ${target.title}.`, bucket: target.title };
+  } catch (err) {
+    // The link itself already succeeded and is what matters.
+    return { note: `Could not move it on the board: ${err.message}` };
+  }
+}
+
+/**
+ * Unlinks the session from its ticket and sends the card back to the first column.
+ *
+ * It is the exact undo of `link`: one command that leaves nothing half done. There
+ * used to be a flag for the move, off by default, on the argument that stopping
+ * work is not the same as never having started it and that sending a card back
+ * throws away the "in progress" signal. That argument lost on purpose, because a
+ * two step undo is a two step undo, and the second step is the one nobody runs.
+ *
+ * The consequence is worth knowing: after this, the board says the ticket has not
+ * been touched. To keep the card in the in progress column, simply do not unlink;
+ * a session ending does not move anything on its own.
+ */
+/**
+ * Where the git hook reads the linked ticket from.
+ *
+ * A git hook knows nothing about the Claude Code session: it runs in the
+ * repository, with no session id and no access to the ledger. So the ticket has to
+ * be left somewhere it can find on its own.
+ *
+ * Inside `.git` and not in the working tree, for three reasons: it is never
+ * committed by accident, it disappears with the clone, and it is per repository,
+ * which is what "the ticket I am on in THIS repo" means.
+ */
+function ticketFilePath(cwd = process.cwd()) {
+  const r = spawnSync('git', ['rev-parse', '--absolute-git-dir'], { cwd, encoding: 'utf8' });
+  if (r.status !== 0) return null;
+  return path.join(r.stdout.trim(), 'workingon-ticket');
+}
+
+function writeTicketFile(issue) {
+  const file = ticketFilePath();
+  if (!file) return;
+  try {
+    fs.writeFileSync(file, `${issue.url || issue.key || issue.id}\n`, 'utf8');
+  } catch { /* not being able to write it only costs the trailer */ }
+}
+
+function clearTicketFile() {
+  const file = ticketFilePath();
+  if (!file) return;
+  try { fs.rmSync(file, { force: true }); } catch { /* nothing to undo */ }
+}
+
 commands.unlink = async () => {
-  writeState(sessionId(), { issueId: null, issueKey: null, issueTitle: null, issueUrl: null, closed: false });
-  out('ok  Session unlinked.', { ok: true });
+  const sid = sessionId();
+  const state = readState(sid);
+  let note = '';
+
+  if (state.issueId) {
+    try {
+      const p = provider();
+      const issue = await p.getIssue(state.issueId);
+      const Provider = p.constructor;
+      if (Provider.capabilities?.buckets && typeof p.board === 'function') {
+        const board = await p.board(issue.containerId);
+        // A finished ticket is left alone. Dragging it out of the done column would
+        // reopen it, and Vikunja would clear its done flag along the way.
+        if (board?.defaultBucketId && !issue.done) {
+          await p.moveToBucket(issue.id, issue.containerId, board.viewId, board.defaultBucketId);
+          const col = board.buckets.find((b) => b.id === board.defaultBucketId);
+          note = `\n  Moved back to ${col?.title || 'the first column'}.`;
+        } else if (issue.done) {
+          note = '\n  Already done, left where it is.';
+        }
+      }
+    } catch (err) {
+      // Unlinking is what was asked for, and it has to work even when the board
+      // does not cooperate.
+      note = `\n  Could not move it back: ${err.message}`;
+    }
+  }
+
+  writeState(sid, { issueId: null, issueKey: null, issueTitle: null, issueUrl: null, closed: false });
+  clearTicketFile();
+  out(`ok  Session unlinked.${note}`, { ok: true });
+};
+
+/** The marker that says a hook is ours, and therefore safe to replace. */
+const GIT_HOOK_MARK = '# workingon: adds the linked ticket as a git trailer';
+
+const GIT_HOOK = `#!/bin/sh
+${GIT_HOOK_MARK}
+#
+# Appends "Ticket: <url>" to the commit message when this repository has a linked
+# ticket, so the log can be read against the board without anyone remembering to
+# type it.
+#
+# A git hook rather than something inside Claude Code on purpose: this way it also
+# stamps the commits you make by hand.
+
+msg_file="$1"
+source="$2"
+
+# Nothing to add to a merge or a squash: their messages are generated and the
+# trailer would end up on work that is not the linked ticket.
+case "$source" in
+  merge|squash) exit 0 ;;
+esac
+
+git_dir=$(git rev-parse --absolute-git-dir 2>/dev/null) || exit 0
+ticket_file="$git_dir/workingon-ticket"
+[ -f "$ticket_file" ] || exit 0
+
+ticket=$(head -n1 "$ticket_file" | tr -d '\\r\\n')
+[ -n "$ticket" ] || exit 0
+
+# Already there, whether from an amend or from a second run.
+grep -qi "^Ticket: " "$msg_file" && exit 0
+
+# A blank line before the trailer, unless the message already ends in one, or git
+# will treat it as part of the body instead of as a trailer.
+[ -n "$(tail -c 1 "$msg_file")" ] && printf '\\n' >> "$msg_file"
+printf '\\nTicket: %s\\n' "$ticket" >> "$msg_file"
+`;
+
+/**
+ * Installs the commit trailer hook in the current repository.
+ *
+ * Refuses to overwrite a hook it did not write. A prepare-commit-msg that someone
+ * put there on purpose is not ours to replace, and silently clobbering it is the
+ * kind of help nobody asks for twice.
+ */
+commands.githook = async () => {
+  const dir = ticketFilePath();
+  if (!dir) fail('Not inside a git repository.');
+  const hooksDir = path.join(path.dirname(dir), 'hooks');
+  const hook = path.join(hooksDir, 'prepare-commit-msg');
+
+  if (flags.remove) {
+    if (fs.existsSync(hook) && fs.readFileSync(hook, 'utf8').includes(GIT_HOOK_MARK)) {
+      fs.rmSync(hook, { force: true });
+      clearTicketFile();
+      out(`ok  Hook removed from ${hook}`, { ok: true, removed: true });
+      return;
+    }
+    out('ok  Nothing of ours to remove.', { ok: true, removed: false });
+    return;
+  }
+
+  if (fs.existsSync(hook)) {
+    const existing = fs.readFileSync(hook, 'utf8');
+    if (!existing.includes(GIT_HOOK_MARK)) {
+      fail(`There is already a prepare-commit-msg hook that is not ours:\n  ${hook}\nMerge it by hand, or move it aside first.`);
+    }
+  }
+
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hook, GIT_HOOK, 'utf8');
+  try { fs.chmodSync(hook, 0o755); } catch { /* Windows does not need it */ }
+  out(`ok  Commits in this repository will carry the linked ticket.\n  ${hook}`, { ok: true, hook });
 };
 
 commands.synced = async () => {

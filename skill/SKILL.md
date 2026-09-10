@@ -67,6 +67,49 @@ Both mark the ledger as recorded. Do not run `WO synced` afterwards.
 
 If the heredoc is awkward, write the text to a temporary file and pass its path.
 
+**4. Ask whether it is finished.**
+
+Only when the session had a ticket linked from the start, and only after the
+comment or the ticket is written. One question, in the user's language:
+
+> ¿Doy la tarea por acabada?
+
+- **Yes** → `WO update --session ${CLAUDE_SESSION_ID} --done`
+- **No** → nothing more. The ticket stays where it is.
+
+Ask, do not decide. Whether something is finished is a judgement about intent, not
+about the diff: tests can pass on work that is half of what the person meant. A
+ticket closed early is worse than one left open, because nobody looks at closed
+tickets again.
+
+Ask once, at the end, and accept the answer. Do not ask again in the same session
+if the answer was no.
+
+### Commits carry the ticket
+
+Where `WO githook` has been run, commits made while a ticket is linked get a
+`Ticket: <url>` trailer, and the log can be read against the board with
+`git log --format='%s | %(trailers:key=Ticket,valueonly)'`.
+
+It is a git hook rather than something inside this tool on purpose: it stamps the
+commits the person makes by hand too, and a scheme that only works when a machine
+is driving is a scheme with a hole in it.
+
+Never write the trailer into a commit message yourself. If it is missing, the hook
+is not installed in that repository; say so and offer `WO githook`.
+
+### The board moves itself
+
+`WO link` drags the card into the "in progress" column, and `WO update --done`
+lands it in the done column. Neither needs a separate command and neither should
+get one: on Vikunja the second is the server's own doing, because a kanban view
+with a done bucket moves the card as soon as the task is marked done.
+
+So never move cards by hand, and never tell the person to. If a card did not move,
+`link` says why on its second line, and the reason is always the same kind: no
+kanban view, no single column that means "in progress", or a provider without
+columns. Report that line as it is rather than working around it.
+
 ## How to write the ticket
 
 **Title**: what it achieves, not what was touched. One line under 80 characters, no prefixes.
@@ -100,6 +143,8 @@ Limits are 600 characters for a body and 400 for a comment, enforced by `create`
 | `<free text>` | Default flow, using that text as the main topic of the title. |
 | `done` / `close` | `WO update --session ${CLAUDE_SESSION_ID} --done`. Add a closing comment first if work is unrecorded. |
 | `link <id>` | `WO link --issue <id> --session ${CLAUDE_SESSION_ID} --keep-unsynced`, then comment the pending progress. |
+| `unlink` | `WO unlink --session ${CLAUDE_SESSION_ID}`. The exact undo of `link`: unlinks and sends the card back to the first column. A ticket already done is left alone. To keep the card in progress, do not unlink. |
+| `githook` | `WO githook`. Installs a `prepare-commit-msg` hook in this repository so commits carry `Ticket: <url>` while a ticket is linked. Once per repository. `--remove` undoes it. |
 | `status` | `WO status --session ${CLAUDE_SESSION_ID}`, summarise in two lines. Do not write. |
 | `doctor` | `WO doctor`. If something fails, explain the concrete fix. Do not write. |
 | `setup` | See [Setting up](#setting-up). |
