@@ -201,8 +201,38 @@ export class VikunjaProvider extends Provider {
     }));
   }
 
-  /** Which column a task sits in, or null when it is not on the board. */
+  /**
+   * Which column a task sits in, or null when it is not on the board.
+   *
+   * Uses `expand=buckets` on the v2 API, which answers for one task instead of
+   * making us read the whole board. On a board with a hundred cards that is 1,8 KB
+   * against 176 KB, and this runs on every link.
+   *
+   * The v2 API lives alongside the v1 one this provider otherwise speaks, and the
+   * same `tk_` token works on both. Mixing dialects is deliberate rather than
+   * untidy: v1 is what the rest of this file is written against and works, and v2
+   * is the only place this particular answer exists cheaply. Do not "unify" them
+   * without checking each call, because the verbs differ (on v1 PUT creates; on v2
+   * PUT replaces).
+   */
   async bucketOf(taskId, projectId, viewId) {
+    try {
+      const v2 = this.apiRoot.replace(/\/api\/v1$/, '/api/v2');
+      const task = await this.http('GET', `${v2}/tasks/${taskId}?expand=buckets`, {
+        headers: {
+          Authorization: `Bearer ${this.credentials.token}`,
+          Accept: 'application/json',
+        },
+      });
+      const here = (task?.buckets || []).find((b) => Number(b.project_view_id) === Number(viewId));
+      if (here) return { id: here.id, title: here.title };
+      // An empty `buckets` means the task really is on no board, so fall through
+      // rather than reporting a column that is not there.
+      if (Array.isArray(task?.buckets)) return null;
+    } catch {
+      // Older instances have no v2. Reading the whole board still works.
+    }
+
     const cols = await this.boardTasks(projectId, viewId);
     const col = cols.find((c) => c.tasks.some((t) => t.id === String(taskId)));
     return col ? { id: col.id, title: col.title } : null;
