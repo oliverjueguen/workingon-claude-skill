@@ -130,6 +130,7 @@ Limits are 600 characters for a body and 400 for a comment, enforced by `create`
 | `<free text>` | Default flow, using that text as the main topic of the title. |
 | `done` / `close` | `WO update --session ${CLAUDE_SESSION_ID} --done`. Add a closing comment first if work is unrecorded. |
 | `link <id>` | `WO link --issue <id> --session ${CLAUDE_SESSION_ID} --keep-unsynced`, then comment the pending progress. |
+| `unlink` | `WO unlink --session ${CLAUDE_SESSION_ID}`. The card stays where it is. Add `--back` only when the person says they never really started it: linked by mistake, or opened and not touched. |
 | `status` | `WO status --session ${CLAUDE_SESSION_ID}`, summarise in two lines. Do not write. |
 | `doctor` | `WO doctor`. If something fails, explain the concrete fix. Do not write. |
 | `setup` | See [Setting up](#setting-up). |

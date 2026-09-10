@@ -795,9 +795,44 @@ async function moveToInProgress(p, issue) {
   }
 }
 
+/**
+ * Unlinks the session from its ticket.
+ *
+ * By default the card is left where it is, and that asymmetry with `link` is
+ * deliberate. Stopping work on something is not the same as never having started
+ * it: if there is progress, sending the card back to the first column throws that
+ * signal away, and the board would claim nothing has been done.
+ *
+ * `--back` is for the other case, the one that is really a correction: linked by
+ * mistake, or opened and not touched.
+ */
 commands.unlink = async () => {
-  writeState(sessionId(), { issueId: null, issueKey: null, issueTitle: null, issueUrl: null, closed: false });
-  out('ok  Session unlinked.', { ok: true });
+  const sid = sessionId();
+  const state = readState(sid);
+  let note = '';
+
+  if (flags.back && state.issueId) {
+    try {
+      const p = provider();
+      const issue = await p.getIssue(state.issueId);
+      const Provider = p.constructor;
+      if (Provider.capabilities?.buckets && typeof p.board === 'function') {
+        const board = await p.board(issue.containerId);
+        if (board?.defaultBucketId) {
+          await p.moveToBucket(issue.id, issue.containerId, board.viewId, board.defaultBucketId);
+          const col = board.buckets.find((b) => b.id === board.defaultBucketId);
+          note = `\n  Moved back to ${col?.title || 'the first column'}.`;
+        }
+      }
+    } catch (err) {
+      // Unlinking is what was asked for, and it has to work even when the board
+      // does not cooperate.
+      note = `\n  Could not move it back: ${err.message}`;
+    }
+  }
+
+  writeState(sid, { issueId: null, issueKey: null, issueTitle: null, issueUrl: null, closed: false });
+  out(`ok  Session unlinked.${note}`, { ok: true });
 };
 
 commands.synced = async () => {
