@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
 import readline from 'node:readline/promises';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   loadConfig, saveConfig, saveCredentials, isConfigured, containerFor, decisionFor,
@@ -643,6 +644,10 @@ commands.update = async () => {
     const next = { lastSyncedSeq: sum.seq, lastSyncedAt: new Date().toISOString() };
     if (flags.done) next.closed = true;
     if (flags.reopen) next.closed = false;
+    // Closing the ticket ends the reason to stamp commits with it. Leaving the file
+    // behind would mark tomorrow's unrelated work with yesterday's ticket, which is
+    // worse than not stamping at all: a wrong reference reads as a true one.
+    if (flags.done) clearTicketFile();
     if (patch.title) next.issueTitle = patch.title;
     if (patch.containerId) next.containerId = patch.containerId;
     writeState(sid, next);
@@ -748,6 +753,7 @@ commands.link = async () => {
   // `update --done` already lands it in the right column. Adding a second write
   // would only race the first.
   const moved = await moveToInProgress(p, issue);
+  writeTicketFile(issue);
 
   out(
     `ok  Session linked to ${issue.key}: ${issue.title}` +
@@ -808,6 +814,37 @@ async function moveToInProgress(p, issue) {
  * been touched. To keep the card in the in progress column, simply do not unlink;
  * a session ending does not move anything on its own.
  */
+/**
+ * Where the git hook reads the linked ticket from.
+ *
+ * A git hook knows nothing about the Claude Code session: it runs in the
+ * repository, with no session id and no access to the ledger. So the ticket has to
+ * be left somewhere it can find on its own.
+ *
+ * Inside `.git` and not in the working tree, for three reasons: it is never
+ * committed by accident, it disappears with the clone, and it is per repository,
+ * which is what "the ticket I am on in THIS repo" means.
+ */
+function ticketFilePath(cwd = process.cwd()) {
+  const r = spawnSync('git', ['rev-parse', '--absolute-git-dir'], { cwd, encoding: 'utf8' });
+  if (r.status !== 0) return null;
+  return path.join(r.stdout.trim(), 'workingon-ticket');
+}
+
+function writeTicketFile(issue) {
+  const file = ticketFilePath();
+  if (!file) return;
+  try {
+    fs.writeFileSync(file, `${issue.url || issue.key || issue.id}\n`, 'utf8');
+  } catch { /* not being able to write it only costs the trailer */ }
+}
+
+function clearTicketFile() {
+  const file = ticketFilePath();
+  if (!file) return;
+  try { fs.rmSync(file, { force: true }); } catch { /* nothing to undo */ }
+}
+
 commands.unlink = async () => {
   const sid = sessionId();
   const state = readState(sid);
@@ -838,7 +875,83 @@ commands.unlink = async () => {
   }
 
   writeState(sid, { issueId: null, issueKey: null, issueTitle: null, issueUrl: null, closed: false });
+  clearTicketFile();
   out(`ok  Session unlinked.${note}`, { ok: true });
+};
+
+/** The marker that says a hook is ours, and therefore safe to replace. */
+const GIT_HOOK_MARK = '# workingon: adds the linked ticket as a git trailer';
+
+const GIT_HOOK = `#!/bin/sh
+${GIT_HOOK_MARK}
+#
+# Appends "Ticket: <url>" to the commit message when this repository has a linked
+# ticket, so the log can be read against the board without anyone remembering to
+# type it.
+#
+# A git hook rather than something inside Claude Code on purpose: this way it also
+# stamps the commits you make by hand.
+
+msg_file="$1"
+source="$2"
+
+# Nothing to add to a merge or a squash: their messages are generated and the
+# trailer would end up on work that is not the linked ticket.
+case "$source" in
+  merge|squash) exit 0 ;;
+esac
+
+git_dir=$(git rev-parse --absolute-git-dir 2>/dev/null) || exit 0
+ticket_file="$git_dir/workingon-ticket"
+[ -f "$ticket_file" ] || exit 0
+
+ticket=$(head -n1 "$ticket_file" | tr -d '\\r\\n')
+[ -n "$ticket" ] || exit 0
+
+# Already there, whether from an amend or from a second run.
+grep -qi "^Ticket: " "$msg_file" && exit 0
+
+# A blank line before the trailer, unless the message already ends in one, or git
+# will treat it as part of the body instead of as a trailer.
+[ -n "$(tail -c 1 "$msg_file")" ] && printf '\\n' >> "$msg_file"
+printf '\\nTicket: %s\\n' "$ticket" >> "$msg_file"
+`;
+
+/**
+ * Installs the commit trailer hook in the current repository.
+ *
+ * Refuses to overwrite a hook it did not write. A prepare-commit-msg that someone
+ * put there on purpose is not ours to replace, and silently clobbering it is the
+ * kind of help nobody asks for twice.
+ */
+commands.githook = async () => {
+  const dir = ticketFilePath();
+  if (!dir) fail('Not inside a git repository.');
+  const hooksDir = path.join(path.dirname(dir), 'hooks');
+  const hook = path.join(hooksDir, 'prepare-commit-msg');
+
+  if (flags.remove) {
+    if (fs.existsSync(hook) && fs.readFileSync(hook, 'utf8').includes(GIT_HOOK_MARK)) {
+      fs.rmSync(hook, { force: true });
+      clearTicketFile();
+      out(`ok  Hook removed from ${hook}`, { ok: true, removed: true });
+      return;
+    }
+    out('ok  Nothing of ours to remove.', { ok: true, removed: false });
+    return;
+  }
+
+  if (fs.existsSync(hook)) {
+    const existing = fs.readFileSync(hook, 'utf8');
+    if (!existing.includes(GIT_HOOK_MARK)) {
+      fail(`There is already a prepare-commit-msg hook that is not ours:\n  ${hook}\nMerge it by hand, or move it aside first.`);
+    }
+  }
+
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hook, GIT_HOOK, 'utf8');
+  try { fs.chmodSync(hook, 0o755); } catch { /* Windows does not need it */ }
+  out(`ok  Commits in this repository will carry the linked ticket.\n  ${hook}`, { ok: true, hook });
 };
 
 commands.synced = async () => {
