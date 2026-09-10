@@ -67,6 +67,36 @@ Both mark the ledger as recorded. Do not run `WO synced` afterwards.
 
 If the heredoc is awkward, write the text to a temporary file and pass its path.
 
+**4. Ask whether it is finished.**
+
+Only when the session had a ticket linked from the start, and only after the
+comment or the ticket is written. One question, in the user's language:
+
+> ¿Doy la tarea por acabada?
+
+- **Yes** → `WO update --session ${CLAUDE_SESSION_ID} --done`
+- **No** → nothing more. The ticket stays where it is.
+
+Ask, do not decide. Whether something is finished is a judgement about intent, not
+about the diff: tests can pass on work that is half of what the person meant. A
+ticket closed early is worse than one left open, because nobody looks at closed
+tickets again.
+
+Ask once, at the end, and accept the answer. Do not ask again in the same session
+if the answer was no.
+
+### The board moves itself
+
+`WO link` drags the card into the "in progress" column, and `WO update --done`
+lands it in the done column. Neither needs a separate command and neither should
+get one: on Vikunja the second is the server's own doing, because a kanban view
+with a done bucket moves the card as soon as the task is marked done.
+
+So never move cards by hand, and never tell the person to. If a card did not move,
+`link` says why on its second line, and the reason is always the same kind: no
+kanban view, no single column that means "in progress", or a provider without
+columns. Report that line as it is rather than working around it.
+
 ## How to write the ticket
 
 **Title**: what it achieves, not what was touched. One line under 80 characters, no prefixes.

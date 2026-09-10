@@ -17,6 +17,9 @@ export class VikunjaProvider extends Provider {
   static capabilities = {
     labels: true, createLabels: true, done: true, percent: true,
     priority: true, deleteIssue: true, deleteComment: true, moveContainer: true,
+    // Columnas de kanban. `moveContainer` mueve entre PROYECTOS; esto mueve entre
+    // columnas del mismo proyecto, que es otra cosa y se confunden con facilidad.
+    buckets: true,
   };
 
   static credentialFields = [
@@ -119,6 +122,108 @@ export class VikunjaProvider extends Provider {
   async listLabels() {
     const labels = await this.paginate('/labels');
     return labels.map((l) => ({ id: String(l.id), name: l.title, color: l.hex_color }));
+  }
+
+  /**
+   * The kanban board of a project: its columns, and which one means "not started"
+   * and which one means "finished".
+   *
+   * Buckets hang off a VIEW, not off the project, so the kanban view has to be
+   * found first. It is found by `view_kind`, never by title or id: a board can be
+   * renamed and the ids differ per project, so anything else breaks silently on the
+   * next project.
+   *
+   * Returns null when the project has no kanban view, which is a normal state and
+   * not an error: a list-only project simply has no columns to move things between.
+   */
+  async board(projectId) {
+    const views = await this.request('GET', `/projects/${projectId}/views`);
+    const kanban = (Array.isArray(views) ? views : []).find((v) => v.view_kind === 'kanban');
+    if (!kanban) return null;
+
+    // `/buckets` devuelve SOLO metadatos de las columnas. Su campo `count` viene a
+    // cero y no trae `tasks`, aunque la columna este llena: en el tablero de
+    // pruebas devolvia cero con cincuenta tareas dentro. Para saber que hay en cada
+    // columna hay que usar `/views/{vista}/tasks`, que es lo que hace `boardTasks`.
+    // Confundirlos hace creer que un tablero esta vacio cuando no lo esta.
+    const buckets = await this.request('GET', `/projects/${projectId}/views/${kanban.id}/buckets`);
+    return {
+      viewId: kanban.id,
+      // Vikunja marks these on the view itself. `doneBucketId` matters more than it
+      // looks: when it is set, marking a task done moves it to that column on its
+      // own, and moving it there marks it done. So closing a ticket needs no extra
+      // call, and adding one would be a second write racing the first.
+      defaultBucketId: kanban.default_bucket_id || null,
+      doneBucketId: kanban.done_bucket_id || null,
+      buckets: (Array.isArray(buckets) ? buckets : []).map((b) => ({
+        id: b.id, title: b.title, limit: b.limit || 0,
+      })),
+    };
+  }
+
+  /**
+   * The column that means "in progress".
+   *
+   * Vikunja names the first and the last column (`default_bucket_id` and
+   * `done_bucket_id`) but has no notion of a middle one, so it has to be inferred.
+   * The rule is deliberately narrow: whatever is neither the default nor the done
+   * column, and ONLY when there is exactly one such column.
+   *
+   * With two or more it returns null instead of guessing. Guessing here would move
+   * a ticket to a column the person did not choose, which is worse than doing
+   * nothing: it looks like it worked.
+   */
+  static inProgressBucket(board) {
+    if (!board) return null;
+    const middle = board.buckets.filter(
+      (b) => b.id !== board.defaultBucketId && b.id !== board.doneBucketId,
+    );
+    return middle.length === 1 ? middle[0] : null;
+  }
+
+  /**
+   * The board with what is actually in it: each column and the tasks inside.
+   *
+   * This is the only endpoint that answers "which column is this task in". Neither
+   * the task object (`bucket_id` comes back as 0) nor the bucket listing (`count`
+   * comes back as 0) will tell you, which is a trap worth naming: both look like
+   * valid answers and both are wrong.
+   */
+  async boardTasks(projectId, viewId) {
+    const cols = await this.request('GET', `/projects/${projectId}/views/${viewId}/tasks`);
+    return (Array.isArray(cols) ? cols : []).map((b) => ({
+      id: b.id,
+      title: b.title,
+      count: b.count || 0,
+      tasks: (Array.isArray(b.tasks) ? b.tasks : []).map((t) => ({
+        id: String(t.id), title: t.title, done: Boolean(t.done),
+      })),
+    }));
+  }
+
+  /** Which column a task sits in, or null when it is not on the board. */
+  async bucketOf(taskId, projectId, viewId) {
+    const cols = await this.boardTasks(projectId, viewId);
+    const col = cols.find((c) => c.tasks.some((t) => t.id === String(taskId)));
+    return col ? { id: col.id, title: col.title } : null;
+  }
+
+  /**
+   * Moves a task into a column.
+   *
+   * Endpoint and body taken from the running instance's own OpenAPI document
+   * (`/api/v1/docs.json`, Vikunja 2.5): POST to
+   * `/projects/{project}/views/{view}/buckets/{bucket}/tasks` with a `models.TaskBucket`.
+   * `project_view_id` plus `task_id` are a unique index, so repeating the same move
+   * is harmless.
+   */
+  async moveToBucket(taskId, projectId, viewId, bucketId) {
+    return this.request(
+      'POST',
+      `/projects/${projectId}/views/${viewId}/buckets/${bucketId}/tasks`,
+      { task_id: Number(taskId), project_view_id: Number(viewId), bucket_id: Number(bucketId) },
+      DRY_RUN,
+    );
   }
 
   async createLabel(name, color = '4e94d4') {

@@ -738,8 +738,62 @@ commands.link = async () => {
     lastSyncedSeq: flags['keep-unsynced'] ? (readState(sid).lastSyncedSeq || 0) : sum.seq,
     closed: Boolean(issue.done),
   });
-  out(`ok  Session linked to ${issue.key}: ${issue.title}\n  ${issue.url}`, { ok: true, ...issue });
+
+  // Linking a ticket means starting on it, so the board should say so. Moving it
+  // here rather than asking is the point: a column that only reflects reality when
+  // someone remembers to drag a card is a column nobody trusts.
+  //
+  // Closing needs no equivalent. When the kanban view has a done bucket configured,
+  // Vikunja moves the card itself as soon as the task is marked done, so
+  // `update --done` already lands it in the right column. Adding a second write
+  // would only race the first.
+  const moved = await moveToInProgress(p, issue);
+
+  out(
+    `ok  Session linked to ${issue.key}: ${issue.title}` +
+    (moved.note ? `\n  ${moved.note}` : '') +
+    `\n  ${issue.url}`,
+    { ok: true, ...issue, movedTo: moved.bucket || null },
+  );
 };
+
+/**
+ * Drags the card into the "in progress" column, when there is one and it is
+ * unambiguous.
+ *
+ * Every failure here is deliberately soft. Linking a ticket has to keep working on
+ * a board with no kanban view, on a provider that has no columns at all, and on a
+ * board whose columns cannot be told apart. Refusing to link because a card could
+ * not be dragged would break the useful part to protect the decorative one.
+ */
+async function moveToInProgress(p, issue) {
+  const Provider = p.constructor;
+  if (!Provider.capabilities?.buckets || typeof p.board !== 'function') return {};
+  if (issue.done) return { note: 'Already done, left where it is.' };
+
+  try {
+    const board = await p.board(issue.containerId);
+    if (!board) return {};
+
+    const target = Provider.inProgressBucket(board);
+    if (!target) {
+      // Two or more middle columns, or none. Saying so beats picking one: moving a
+      // card to a column the person did not choose looks like it worked.
+      return { note: 'No single "in progress" column on this board, so nothing was moved.' };
+    }
+
+    const at = typeof p.bucketOf === 'function'
+      ? await p.bucketOf(issue.id, issue.containerId, board.viewId)
+      : null;
+    if (at && at.id === target.id) return { note: `Already in ${target.title}.` };
+
+    await p.moveToBucket(issue.id, issue.containerId, board.viewId, target.id);
+    return { note: `Moved to ${target.title}.`, bucket: target.title };
+  } catch (err) {
+    // The link itself already succeeded and is what matters.
+    return { note: `Could not move it on the board: ${err.message}` };
+  }
+}
 
 commands.unlink = async () => {
   writeState(sessionId(), { issueId: null, issueKey: null, issueTitle: null, issueUrl: null, closed: false });
